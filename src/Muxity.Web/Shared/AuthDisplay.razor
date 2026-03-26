@@ -1,0 +1,20 @@
+@inject Muxity.Web.Services.AuthStateService Auth
+@inject NavigationManager Nav
+
+@if (Auth.IsAuthenticated)
+{
+    <span class="user-name">@Auth.DisplayName</span>
+    <button @onclick="Logout">Sign out</button>
+}
+else
+{
+    <a href="/login">Sign in</a>
+}
+
+@code {
+    private void Logout()
+    {
+        Auth.ClearSession();
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+}
