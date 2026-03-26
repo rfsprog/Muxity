@@ -1,0 +1,39 @@
+@page "/login"
+@inject IHttpClientFactory ClientFactory
+@inject Muxity.Web.Services.AuthStateService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Sign in — Muxity</PageTitle>
+
+<h1>Sign in</h1>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <p class="error">@_error</p>
+}
+
+<div class="login-providers">
+    <button @onclick='() => BeginOidc("google")' class="btn-google">
+        Sign in with Google
+    </button>
+    <button @onclick='() => BeginOidc("microsoft")' class="btn-microsoft">
+        Sign in with Microsoft
+    </button>
+</div>
+
+@code {
+    private string? _error;
+
+    /// <summary>
+    /// Redirect the browser to the provider's OIDC authorization endpoint.
+    /// On return, the provider redirects back to /login/callback?provider=X&code=Y.
+    /// The Blazor client exchanges the code for an ID token, then calls POST /auth/callback.
+    /// Full OIDC callback handling is implemented in Phase 5.
+    /// </summary>
+    private void BeginOidc(string provider)
+    {
+        // Phase 5: construct the OIDC authorization URL from discovered metadata
+        // and redirect the user. For now, navigate to a placeholder.
+        Nav.NavigateTo($"/login/callback?provider={provider}");
+    }
+}
