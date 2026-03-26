@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "prefix": {
+      "value": "muxity"
+    },
+    "repositoryUrl": {
+      "value": "https://github.com/rfsprog/Muxity"
+    },
+    "branch": {
+      "value": "main"
+    },
+    "repositoryToken": {
+      "reference": {
+        "keyVault": { "id": "" },
+        "secretName": "github-pat"
+      }
+    },
+    "rabbitMqConnectionString": {
+      "reference": {
+        "keyVault": { "id": "" },
+        "secretName": "rabbitmq-connection"
+      }
+    },
+    "jwtSigningKey": {
+      "reference": {
+        "keyVault": { "id": "" },
+        "secretName": "jwt-signing-key"
+      }
+    },
+    "googleClientId": {
+      "value": ""
+    },
+    "microsoftClientId": {
+      "value": ""
+    },
+    "imageTag": {
+      "value": "latest"
+    },
+    "ghcrOwner": {
+      "value": "rfsprog"
+    }
+  }
+}
