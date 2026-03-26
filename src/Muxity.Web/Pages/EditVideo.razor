@@ -1,0 +1,97 @@
+@page "/videos/{Id}/edit"
+@inject ApiClient Api
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Edit Video — Muxity</PageTitle>
+
+@if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login", replace: true); return; }
+
+@if (_loading)
+{
+    <div class="loading-spinner"></div>
+}
+else if (_video is null)
+{
+    <div class="alert alert-error">Video not found.</div>
+}
+else
+{
+    <h1>Edit Video</h1>
+
+    <div class="edit-form">
+        <div class="form-group">
+            <label>Title *</label>
+            <input type="text" @bind="_title" maxlength="200" />
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea @bind="_description" rows="4" maxlength="2000"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Visibility</label>
+            <select @bind="_visibility">
+                <option value="private">Private</option>
+                <option value="public">Public</option>
+            </select>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-error">@_error</div>
+        }
+        @if (_saved)
+        {
+            <div class="alert alert-success">Changes saved.</div>
+        }
+
+        <div class="form-actions">
+            <button class="btn btn-primary" @onclick="Save" disabled="@_saving">
+                @(_saving ? "Saving…" : "Save")
+            </button>
+            <a href="/videos/@Id" class="btn">Cancel</a>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    private VideoDetail? _video;
+    private string _title       = string.Empty;
+    private string _description = string.Empty;
+    private string _visibility  = "private";
+    private bool _loading = true;
+    private bool _saving;
+    private bool _saved;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _video   = await Api.GetVideoAsync(Id);
+
+        if (_video is null) { _loading = false; return; }
+        if (_video.OwnerId != Auth.UserId) { Nav.NavigateTo("/", replace: true); return; }
+
+        _title       = _video.Title;
+        _description = _video.Description;
+        _visibility  = _video.Visibility;
+        _loading     = false;
+    }
+
+    private async Task Save()
+    {
+        _saving = true;
+        _error  = null;
+        _saved  = false;
+
+        var updated = await Api.UpdateVideoAsync(Id, _title, _description, _visibility);
+        if (updated is not null) { _saved = true; _video = updated; }
+        else _error = "Save failed. Please try again.";
+
+        _saving = false;
+    }
+}

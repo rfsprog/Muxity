@@ -1,0 +1,124 @@
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# ── Images ────────────────────────────────────────────────────────────────────
+image:
+  tag:        latest
+  pullPolicy: IfNotPresent
+
+api:
+  replicaCount: 2
+  image:        { repository: muxity/api }
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits:   { cpu: "1",  memory: 512Mi }
+  hpa:
+    enabled:     true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU:   70
+
+streaming:
+  replicaCount: 3
+  image:        { repository: muxity/streaming }
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits:   { cpu: "1",  memory: 512Mi }
+  hpa:
+    enabled:     true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPU:   70
+
+transcoder:
+  replicaCount: 1
+  image:        { repository: muxity/transcoder }
+  hardwareAccel: Auto        # Auto | QSV | NVENC | Software
+  maxParallelJobs: 2
+  nodeSelector: {}
+  tolerations: []
+  resources:
+    requests: { cpu: "2",   memory: 2Gi }
+    limits:   { cpu: "4",   memory: 4Gi }
+  # Uncomment for NVIDIA GPU nodes:
+  # nodeSelector:
+  #   hardware-accel: nvidia
+  # resources:
+  #   limits:
+  #     nvidia.com/gpu: "1"
+
+web:
+  replicaCount: 2
+  image:        { repository: muxity/web }
+  resources:
+    requests: { cpu: 50m,  memory: 64Mi }
+    limits:   { cpu: 200m, memory: 128Mi }
+
+# ── Config ────────────────────────────────────────────────────────────────────
+config:
+  mongo:
+    database: muxity
+  jwt:
+    issuer:              muxity-api
+    audience:            muxity-web
+    accessTokenMinutes:  15
+    refreshTokenDays:    30
+  storage:
+    provider:  Local      # Local | S3
+    localBase: /var/muxity/storage
+  cdn:
+    provider:  Passthrough  # Passthrough | CloudFront | Cloudflare
+  cors:
+    webOrigin: https://app.muxity.io
+  rateLimit:
+    requestsPerWindow: 300
+    windowSeconds:     10
+
+# ── Secrets (override via --set or external secret manager) ──────────────────
+secrets:
+  jwtSecret:           CHANGE_ME
+  mongoConnectionString: ""      # leave empty to use bundled MongoDB
+  oidcGoogleClientId:  ""
+  oidcMicrosoftClientId: ""
+  s3AccessKeyId:       ""
+  s3SecretAccessKey:   ""
+  cloudfrontKeyPairId: ""
+  cloudflareSigningSecret: ""
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+persistence:
+  enabled:      true
+  storageClass: ""
+  accessMode:   ReadWriteMany   # NFS / shared storage for multi-node
+  size:         100Gi
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled:   true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    api:       api.muxity.io
+    streaming: stream.muxity.io
+    web:       app.muxity.io
+  tls:
+    enabled:    true
+    secretName: muxity-tls
+
+# ── Bundled dependencies ──────────────────────────────────────────────────────
+mongodb:
+  enabled: true
+  auth:
+    enabled: false
+  persistence:
+    size: 20Gi
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: muxity
+    password: changeme
+  persistence:
+    size: 5Gi

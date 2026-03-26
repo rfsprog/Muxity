@@ -1,0 +1,43 @@
+@inject NavigationManager Nav
+
+<div class="video-card" @onclick="GoToVideo">
+    <div class="thumbnail">
+        @if (!string.IsNullOrEmpty(Video.ThumbnailPath))
+        {
+            <img src="@Video.ThumbnailPath" alt="@Video.Title" loading="lazy" />
+        }
+        else
+        {
+            <div class="thumbnail-placeholder">
+                <span>🎬</span>
+            </div>
+        }
+        @if (Video.DurationSeconds.HasValue)
+        {
+            <span class="duration">@FormatDuration(Video.DurationSeconds.Value)</span>
+        }
+    </div>
+    <div class="card-body">
+        <h3 class="card-title">@Video.Title</h3>
+        @if (!string.IsNullOrEmpty(Video.Description))
+        {
+            <p class="card-desc">@Truncate(Video.Description, 80)</p>
+        }
+        <span class="card-date">@Video.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public VideoSummary Video { get; set; } = null!;
+
+    private void GoToVideo() => Nav.NavigateTo($"/videos/{Video.Id}");
+
+    private static string FormatDuration(double s)
+    {
+        var ts = TimeSpan.FromSeconds(s);
+        return ts.TotalHours >= 1 ? ts.ToString(@"h\:mm\:ss") : ts.ToString(@"m\:ss");
+    }
+
+    private static string Truncate(string s, int max)
+        => s.Length <= max ? s : s[..max] + "…";
+}

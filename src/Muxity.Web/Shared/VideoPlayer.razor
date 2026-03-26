@@ -1,0 +1,36 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="video-player-wrapper">
+    <video id="@_playerId"
+           class="video-js vjs-default-skin vjs-big-play-centered"
+           controls
+           preload="auto"
+           poster="@PosterUrl"
+           data-setup="{}">
+    </video>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string StreamingKey     { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string StreamingBaseUrl { get; set; } = string.Empty;
+    [Parameter]                 public string? PosterUrl       { get; set; }
+
+    private readonly string _playerId = $"vjs-{Guid.NewGuid():N}";
+    private bool _initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _initialized) return;
+        _initialized = true;
+
+        var src = $"{StreamingBaseUrl.TrimEnd('/')}/stream/{StreamingKey}/master.m3u8";
+        await JS.InvokeVoidAsync("muxityPlayer.init", _playerId, src, PosterUrl);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_initialized)
+            await JS.InvokeVoidAsync("muxityPlayer.dispose", _playerId);
+    }
+}

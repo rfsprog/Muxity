@@ -1,0 +1,90 @@
+@page "/videos/{Id}"
+@inject ApiClient Api
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+
+<PageTitle>@(_video?.Title ?? "Video") — Muxity</PageTitle>
+
+@if (_loading)
+{
+    <div class="loading-spinner"></div>
+}
+else if (_video is null)
+{
+    <div class="alert alert-error">Video not found.</div>
+}
+else
+{
+    <div class="video-detail">
+        <div class="player-container">
+            @if (_video.Status == "ready" && _streamingKey is not null)
+            {
+                <VideoPlayer StreamingKey="@_streamingKey.Key"
+                             StreamingBaseUrl="@_streamingBase"
+                             PosterUrl="@_video.ThumbnailPath" />
+            }
+            else if (_video.Status is "pending" or "transcoding")
+            {
+                <div class="player-placeholder">
+                    <UploadProgress Label="@($"Transcoding… ({_video.Status})")" Percent="@(_transcodeProgress ?? 0)" />
+                </div>
+            }
+            else
+            {
+                <div class="player-placeholder player-error">Video unavailable.</div>
+            }
+        </div>
+
+        <div class="video-meta">
+            <h1>@_video.Title</h1>
+            @if (!string.IsNullOrEmpty(_video.Description))
+            {
+                <p class="description">@_video.Description</p>
+            }
+            <div class="meta-row">
+                <span class="badge badge-@_video.Visibility">@_video.Visibility</span>
+                @if (_video.DurationSeconds.HasValue)
+                {
+                    <span>@FormatDuration(_video.DurationSeconds.Value)</span>
+                }
+                <span>@_video.CreatedAt.ToLocalTime().ToString("MMM d, yyyy")</span>
+            </div>
+
+            @if (Auth.IsAuthenticated && Auth.UserId == _video.OwnerId)
+            {
+                <div class="owner-actions">
+                    <a href="/videos/@_video.Id/edit" class="btn btn-sm">Edit</a>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = string.Empty;
+
+    private VideoDetail? _video;
+    private StreamingKeyResponse? _streamingKey;
+    private bool _loading = true;
+    private int? _transcodeProgress;
+    private string _streamingBase = "http://localhost:5200";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _video   = await Api.GetVideoAsync(Id);
+
+        if (_video?.Status == "ready" && Auth.IsAuthenticated && Auth.UserId == _video.OwnerId)
+            _streamingKey = await Api.GetStreamingKeyAsync(Id);
+
+        _loading = false;
+    }
+
+    private static string FormatDuration(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.TotalHours >= 1
+            ? ts.ToString(@"h\:mm\:ss")
+            : ts.ToString(@"m\:ss");
+    }
+}

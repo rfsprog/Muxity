@@ -1,0 +1,178 @@
+@page "/upload"
+@inject ApiClient Api
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Upload — Muxity</PageTitle>
+
+@if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login", replace: true); return; }
+
+<h1>Upload Video</h1>
+
+@if (_uploadState == UploadState.Idle)
+{
+    <div class="upload-form">
+        <div class="drop-zone @(_dragging ? "dragging" : "")"
+             @ondragenter="() => _dragging = true"
+             @ondragleave="() => _dragging = false"
+             @ondrop="OnDrop" @ondragover:preventDefault>
+            <InputFile OnChange="OnFileSelected" accept="video/*" />
+            <p>Drag a video file here or <label>browse<InputFile OnChange="OnFileSelected" accept="video/*" style="display:none"/></label></p>
+            @if (_file is not null)
+            {
+                <p class="file-name">📄 @_file.Name (@FormatBytes(_file.Size))</p>
+            }
+        </div>
+
+        <div class="form-group">
+            <label>Title *</label>
+            <input type="text" @bind="_title" placeholder="Enter a title" maxlength="200" />
+        </div>
+
+        <div class="form-group">
+            <label>Description</label>
+            <textarea @bind="_description" rows="3" placeholder="Optional description" maxlength="2000"></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Visibility</label>
+            <select @bind="_visibility">
+                <option value="private">Private</option>
+                <option value="public">Public</option>
+            </select>
+        </div>
+
+        @if (_error is not null)
+        {
+            <div class="alert alert-error">@_error</div>
+        }
+
+        <button class="btn btn-primary" @onclick="StartUpload"
+                disabled="@(_file is null || string.IsNullOrWhiteSpace(_title))">
+            Upload
+        </button>
+    </div>
+}
+else if (_uploadState == UploadState.Uploading)
+{
+    <UploadProgress Label="Uploading…" Percent="@_uploadPercent" />
+}
+else if (_uploadState == UploadState.Transcoding)
+{
+    <UploadProgress Label="@($"Transcoding… ({_transcodeStatus})")" Percent="@_transcodePercent" />
+}
+else if (_uploadState == UploadState.Done)
+{
+    <div class="upload-success">
+        <p>✅ Your video is ready!</p>
+        <a href="/videos/@_videoId" class="btn btn-primary">Watch now</a>
+        <a href="/upload" class="btn">Upload another</a>
+    </div>
+}
+else if (_uploadState == UploadState.Failed)
+{
+    <div class="alert alert-error">Upload or transcoding failed. @_error</div>
+    <button class="btn" @onclick="Reset">Try again</button>
+}
+
+@code {
+    enum UploadState { Idle, Uploading, Transcoding, Done, Failed }
+
+    private IBrowserFile? _file;
+    private string _title       = string.Empty;
+    private string _description = string.Empty;
+    private string _visibility  = "private";
+    private bool   _dragging;
+    private string? _error;
+    private UploadState _uploadState = UploadState.Idle;
+    private int _uploadPercent;
+    private int _transcodePercent;
+    private string? _transcodeStatus;
+    private string? _videoId;
+
+    private void OnFileSelected(InputFileChangeEventArgs e) => _file = e.File;
+    private void OnDrop(DragEventArgs e) { _dragging = false; }
+
+    private async Task StartUpload()
+    {
+        if (_file is null || string.IsNullOrWhiteSpace(_title)) return;
+
+        _uploadState = UploadState.Uploading;
+        _error       = null;
+
+        try
+        {
+            // Build multipart form
+            using var content = new MultipartFormDataContent();
+            var stream = _file.OpenReadStream(maxAllowedSize: 10L * 1024 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", _file.Name);
+            content.Add(new StringContent(_title),       "title");
+            content.Add(new StringContent(_description), "description");
+            content.Add(new StringContent(_visibility),  "visibility");
+
+            // Use JS interop for upload progress tracking
+            _videoId = await JS.InvokeAsync<string>(
+                "uploadHelper.upload",
+                await GetApiBaseUrl(),
+                await GetBearerToken(),
+                DotNetObjectReference.Create(this));
+
+            if (_videoId is null) throw new Exception("Upload failed — no video ID returned.");
+
+            // Poll transcode progress
+            _uploadState = UploadState.Transcoding;
+            await PollTranscodeAsync();
+        }
+        catch (Exception ex)
+        {
+            _error       = ex.Message;
+            _uploadState = UploadState.Failed;
+        }
+    }
+
+    private async Task PollTranscodeAsync()
+    {
+        while (true)
+        {
+            await Task.Delay(3000);
+            var status = await Api.GetUploadStatusAsync(_videoId!);
+            if (status is null) break;
+
+            _transcodeStatus  = status.Status;
+            _transcodePercent = status.Progress ?? 0;
+            StateHasChanged();
+
+            if (status.Status == "ready")  { _uploadState = UploadState.Done;   break; }
+            if (status.Status == "failed") { _error = status.Error; _uploadState = UploadState.Failed; break; }
+        }
+    }
+
+    [JSInvokable]
+    public void OnUploadProgress(int percent)
+    {
+        _uploadPercent = percent;
+        StateHasChanged();
+    }
+
+    private void Reset()
+    {
+        _uploadState = UploadState.Idle;
+        _file        = null;
+        _error       = null;
+        _uploadPercent = _transcodePercent = 0;
+    }
+
+    private async Task<string> GetApiBaseUrl() =>
+        await JS.InvokeAsync<string>("eval", "window.__muxityApiBase || 'http://localhost:5100'");
+
+    private Task<string> GetBearerToken() =>
+        Task.FromResult(Auth.GetAccessToken() ?? string.Empty);
+
+    private static string FormatBytes(long bytes) => bytes switch
+    {
+        >= 1_073_741_824 => $"{bytes / 1_073_741_824.0:F1} GB",
+        >= 1_048_576     => $"{bytes / 1_048_576.0:F1} MB",
+        _                => $"{bytes / 1024.0:F1} KB",
+    };
+}
