@@ -1,0 +1,117 @@
+@page "/dashboard"
+@inject ApiClient Api
+@inject AuthStateService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard — Muxity</PageTitle>
+
+@if (!Auth.IsAuthenticated) { Nav.NavigateTo("/login", replace: true); return; }
+
+<div class="page-header">
+    <h1>My Videos</h1>
+    <a href="/upload" class="btn btn-primary">+ Upload</a>
+</div>
+
+<div class="filter-bar">
+    <select @onchange="OnStatusChanged">
+        <option value="">All statuses</option>
+        <option value="pending">Pending</option>
+        <option value="transcoding">Transcoding</option>
+        <option value="ready">Ready</option>
+        <option value="failed">Failed</option>
+    </select>
+    <select @onchange="OnVisibilityChanged">
+        <option value="">All</option>
+        <option value="public">Public</option>
+        <option value="private">Private</option>
+    </select>
+</div>
+
+@if (_loading)
+{
+    <div class="loading-spinner"></div>
+}
+else if (_videos is { Items.Count: 0 })
+{
+    <p class="empty-state">No videos yet. <a href="/upload">Upload your first video</a>.</p>
+}
+else if (_videos is not null)
+{
+    <div class="video-list">
+        @foreach (var v in _videos.Items)
+        {
+            <div class="video-list-item">
+                <VideoCard Video="v" />
+                <div class="video-actions">
+                    <span class="badge badge-@v.Status">@v.Status</span>
+                    <a href="/videos/@v.Id/edit" class="btn btn-sm">Edit</a>
+                    <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDelete(v)">Delete</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="pagination">
+        <button disabled="@(_page <= 1)" @onclick="PrevPage">← Prev</button>
+        <span>Page @_page of @TotalPages</span>
+        <button disabled="@(_page >= TotalPages)" @onclick="NextPage">Next →</button>
+    </div>
+}
+
+@if (_deleteTarget is not null)
+{
+    <div class="modal-overlay">
+        <div class="modal">
+            <p>Delete <strong>@_deleteTarget.Title</strong>? This cannot be undone.</p>
+            <button class="btn btn-danger" @onclick="DeleteConfirmed">Delete</button>
+            <button class="btn" @onclick="() => _deleteTarget = null">Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    private PagedResponse<VideoSummary>? _videos;
+    private bool _loading = true;
+    private int _page = 1;
+    private string? _statusFilter;
+    private string? _visibilityFilter;
+    private VideoSummary? _deleteTarget;
+
+    private int TotalPages => _videos is null ? 1 : (int)Math.Ceiling(_videos.TotalCount / 20.0);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _videos  = await Api.ListVideosAsync(_page, status: _statusFilter, visibility: _visibilityFilter);
+        _loading = false;
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        _statusFilter = e.Value?.ToString();
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task OnVisibilityChanged(ChangeEventArgs e)
+    {
+        _visibilityFilter = e.Value?.ToString();
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private void ConfirmDelete(VideoSummary v) => _deleteTarget = v;
+
+    private async Task DeleteConfirmed()
+    {
+        if (_deleteTarget is null) return;
+        await Api.DeleteVideoAsync(_deleteTarget.Id);
+        _deleteTarget = null;
+        await LoadAsync();
+    }
+
+    private async Task PrevPage() { _page--; await LoadAsync(); }
+    private async Task NextPage() { _page++; await LoadAsync(); }
+}

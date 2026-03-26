@@ -7,5 +7,5 @@ public static class Collections
     public const string TranscodeJobs = "transcode_jobs";
     public const string StreamingKeys = "streaming_keys";
     public const string RefreshTokens = "refresh_tokens";
-    public const string WorkerNodes   = "worker_nodes";
+    public const string WorkerNodes    = "worker_nodes";
 }

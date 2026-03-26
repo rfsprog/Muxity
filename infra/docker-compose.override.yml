@@ -1,0 +1,25 @@
+# Development overrides — hot-reload, verbose logging, exposed debug ports
+name: muxity
+
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+
+  streaming:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Logging__LogLevel__Default: Debug
+
+  transcoder-cpu:
+    environment:
+      Logging__LogLevel__Default: Debug
+
+  mongodb:
+    ports:
+      - "27017:27017"
+
+  rabbitmq:
+    ports:
+      - "5672:5672"

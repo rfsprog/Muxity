@@ -2,7 +2,6 @@ using FastEndpoints;
 using FastEndpoints.Security;
 using Muxity.Api.Services.Auth;
 using Muxity.Api.Services.Messaging;
-using Muxity.Api.Services.Storage;
 using Muxity.Shared.Data;
 using Muxity.Shared.Storage;
 

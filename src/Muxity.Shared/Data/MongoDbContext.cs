@@ -21,6 +21,7 @@ public class MongoDbContext
     public IMongoCollection<TranscodeJob> TranscodeJobs => _db.GetCollection<TranscodeJob>(Collections.TranscodeJobs);
     public IMongoCollection<StreamingKey> StreamingKeys => _db.GetCollection<StreamingKey>(Collections.StreamingKeys);
     public IMongoCollection<RefreshToken> RefreshTokens => _db.GetCollection<RefreshToken>(Collections.RefreshTokens);
+    public IMongoCollection<WorkerNode>   WorkerNodes   => _db.GetCollection<WorkerNode>(Collections.WorkerNodes);
 
     /// <summary>
     /// Creates all required indexes. Safe to call on every startup (idempotent).

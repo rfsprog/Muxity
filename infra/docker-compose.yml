@@ -1,0 +1,196 @@
+name: muxity
+
+# ── Shared environment fragments ──────────────────────────────────────────────
+x-mongo-env: &mongo-env
+  MongoDB__ConnectionString: ${MONGO_CONNECTION:-mongodb://mongodb:27017}
+  MongoDB__DatabaseName:     ${MONGO_INITDB_DATABASE:-muxity}
+
+x-rabbitmq-env: &rabbitmq-env
+  RabbitMQ__Host:           ${RABBITMQ_HOST:-rabbitmq}
+  RabbitMQ__Port:           ${RABBITMQ_PORT:-5672}
+  RabbitMQ__Username:       ${RABBITMQ_DEFAULT_USER:-muxity}
+  RabbitMQ__Password:       ${RABBITMQ_DEFAULT_PASS:-changeme}
+  RabbitMQ__TranscodeQueue: transcode_jobs
+
+x-jwt-env: &jwt-env
+  Jwt__Secret:   ${JWT_SECRET}
+  Jwt__Issuer:   ${JWT_ISSUER:-muxity-api}
+  Jwt__Audience: ${JWT_AUDIENCE:-muxity-web}
+
+x-storage-env: &storage-env
+  Storage__Provider:         ${STORAGE_PROVIDER:-Local}
+  Storage__Local__BasePath:  ${STORAGE_LOCAL_BASE:-/var/muxity/storage}
+  Storage__Local__BaseUrl:   ${STORAGE_LOCAL_BASEURL:-http://streaming:8080/files}
+  Storage__S3__ServiceUrl:   ${S3_SERVICE_URL:-}
+  Storage__S3__BucketName:   ${S3_BUCKET:-muxity}
+  Storage__S3__Region:       ${S3_REGION:-us-east-1}
+  Storage__S3__AccessKeyId:  ${S3_ACCESS_KEY:-}
+  Storage__S3__SecretAccessKey: ${S3_SECRET_KEY:-}
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── Databases ────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-muxity}
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-muxity}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-changeme}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "15672:15672"   # Management UI (dev)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API ───────────────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-5100}:8080"
+    environment:
+      <<: [*mongo-env, *rabbitmq-env, *jwt-env, *storage-env]
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Cors__WebOrigin: http://localhost:${WEB_PORT:-5173}
+      Oidc__google__ClientId:    ${OIDC_GOOGLE_CLIENT_ID}
+      Oidc__microsoft__ClientId: ${OIDC_MICROSOFT_CLIENT_ID}
+    volumes:
+      - storage-data:${STORAGE_LOCAL_BASE:-/var/muxity/storage}
+    depends_on:
+      mongodb:   { condition: service_healthy }
+      rabbitmq:  { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Streaming API ─────────────────────────────────────────────────────────────
+  streaming:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Streaming/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${STREAMING_PORT:-5200}:8080"
+    environment:
+      <<: [*mongo-env, *jwt-env, *storage-env]
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Cors__WebOrigin: http://localhost:${WEB_PORT:-5173}
+      Cdn__Provider: ${CDN_PROVIDER:-Passthrough}
+      Cdn__CloudFront__BaseUrl:        ${CLOUDFRONT_BASE_URL:-}
+      Cdn__CloudFront__KeyPairId:      ${CLOUDFRONT_KEYPAIR_ID:-}
+      Cdn__CloudFront__PrivateKeyPath: ${CLOUDFRONT_PRIVATE_KEY_PATH:-}
+      Cdn__Cloudflare__BaseUrl:        ${CLOUDFLARE_BASE_URL:-}
+      Cdn__Cloudflare__SigningSecret:  ${CLOUDFLARE_SIGNING_SECRET:-}
+    volumes:
+      - storage-data:${STORAGE_LOCAL_BASE:-/var/muxity/storage}:ro
+    depends_on:
+      mongodb: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── Transcoder: Software (CPU) ────────────────────────────────────────────────
+  transcoder-cpu:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Transcoder/Dockerfile
+    restart: unless-stopped
+    profiles: [cpu, default]
+    environment:
+      <<: [*mongo-env, *rabbitmq-env, *storage-env]
+      Transcoder__HardwareAccel:  Software
+      Transcoder__MaxParallelJobs: ${TRANSCODER_MAX_PARALLEL:-2}
+      Transcoder__FfmpegPath:  ffmpeg
+      Transcoder__FfprobePath: ffprobe
+    volumes:
+      - storage-data:${STORAGE_LOCAL_BASE:-/var/muxity/storage}
+    depends_on:
+      mongodb:  { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  # ── Transcoder: Intel QSV ─────────────────────────────────────────────────────
+  transcoder-intel:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Transcoder/Dockerfile.intel
+    restart: unless-stopped
+    profiles: [intel]
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      <<: [*mongo-env, *rabbitmq-env, *storage-env]
+      Transcoder__HardwareAccel:   QSV
+      Transcoder__MaxParallelJobs: ${TRANSCODER_MAX_PARALLEL:-2}
+    volumes:
+      - storage-data:${STORAGE_LOCAL_BASE:-/var/muxity/storage}
+    depends_on:
+      mongodb:  { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  # ── Transcoder: NVIDIA NVENC ──────────────────────────────────────────────────
+  transcoder-nvidia:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Transcoder/Dockerfile.nvidia
+    restart: unless-stopped
+    profiles: [nvidia]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      <<: [*mongo-env, *rabbitmq-env, *storage-env]
+      Transcoder__HardwareAccel:   NVENC
+      Transcoder__MaxParallelJobs: ${TRANSCODER_MAX_PARALLEL:-2}
+    volumes:
+      - storage-data:${STORAGE_LOCAL_BASE:-/var/muxity/storage}
+    depends_on:
+      mongodb:  { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  # ── Blazor WASM (served via nginx) ────────────────────────────────────────────
+  web:
+    build:
+      context: ..
+      dockerfile: src/Muxity.Web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - api
+      - streaming
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  mongo-data:
+  rabbitmq-data:
+  storage-data:

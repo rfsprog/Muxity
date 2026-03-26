@@ -1,0 +1,48 @@
+@page "/login/callback"
+@inject OidcService Oidc
+@inject NavigationManager Nav
+
+<PageTitle>Signing in…</PageTitle>
+
+<div class="login-callback">
+    @if (_error is not null)
+    {
+        <div class="alert alert-error">@_error <a href="/login">Try again</a></div>
+    }
+    else
+    {
+        <div class="loading-spinner"></div>
+        <p>Completing sign in…</p>
+    }
+</div>
+
+@code {
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri    = new Uri(Nav.Uri);
+        var query  = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        query.TryGetValue("code",  out var code);
+        query.TryGetValue("state", out var state);
+        query.TryGetValue("error", out var oauthError);
+
+        if (!string.IsNullOrEmpty(oauthError))
+        {
+            _error = $"Provider error: {oauthError}";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state))
+        {
+            _error = "Missing authorization code or state.";
+            return;
+        }
+
+        var result = await Oidc.HandleCallbackAsync(code!, state!);
+        if (result is null) { _error = "Sign-in failed. Please try again."; return; }
+
+        Nav.NavigateTo("/dashboard", replace: true);
+    }
+}

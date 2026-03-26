@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "muxity.fullname" . }}-transcoder
+  labels:
+    {{- include "muxity.labels" . | nindent 4 }}
+    app.kubernetes.io/component: transcoder
+spec:
+  replicas: {{ .Values.transcoder.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "muxity.fullname" . }}-transcoder
+  template:
+    metadata:
+      labels:
+        app: {{ include "muxity.fullname" . }}-transcoder
+    spec:
+      {{- with .Values.transcoder.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.transcoder.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: transcoder
+          image: "{{ .Values.transcoder.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - configMapRef:  { name: "{{ include "muxity.fullname" . }}-config" }
+            - secretRef:     { name: "{{ include "muxity.fullname" . }}-secrets" }
+          env:
+            - name: MongoDB__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "muxity.fullname" . }}-secrets
+                  key: MONGO_CONNECTION
+            - name: RabbitMQ__Password
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "muxity.fullname" . }}-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: Transcoder__HardwareAccel
+              value: {{ .Values.transcoder.hardwareAccel | quote }}
+            - name: Transcoder__MaxParallelJobs
+              value: {{ .Values.transcoder.maxParallelJobs | quote }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: storage
+              mountPath: {{ .Values.config.storage.localBase }}
+          {{- end }}
+          resources: {{- toYaml .Values.transcoder.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "muxity.fullname" . }}-storage
+      {{- end }}

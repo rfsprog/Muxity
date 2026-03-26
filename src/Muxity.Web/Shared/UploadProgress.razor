@@ -1,0 +1,12 @@
+<div class="upload-progress">
+    <p class="progress-label">@Label</p>
+    <div class="progress-bar-track">
+        <div class="progress-bar-fill" style="width: @(Percent)%"></div>
+    </div>
+    <span class="progress-pct">@Percent%</span>
+</div>
+
+@code {
+    [Parameter] public string Label   { get; set; } = "Processing…";
+    [Parameter] public int    Percent { get; set; }
+}

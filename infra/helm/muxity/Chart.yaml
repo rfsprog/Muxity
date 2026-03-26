@@ -1,0 +1,16 @@
+apiVersion: v2
+name: muxity
+description: Muxity — distributed HLS video streaming platform
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: mongodb
+    version: "14.*"
+    repository: https://charts.bitnami.com/bitnami
+    condition: mongodb.enabled
+  - name: rabbitmq
+    version: "14.*"
+    repository: https://charts.bitnami.com/bitnami
+    condition: rabbitmq.enabled

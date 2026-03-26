@@ -1,7 +1,63 @@
 @page "/"
-<PageTitle>Muxity — Home</PageTitle>
+@inject ApiClient Api
 
-<h1>Welcome to Muxity</h1>
-<p>Stream videos with adaptive HLS quality.</p>
+<PageTitle>Muxity</PageTitle>
 
-<!-- Phase 5: public video feed grid goes here -->
+<div class="page-header">
+    <h1>Videos</h1>
+    <div class="search-bar">
+        <input type="text" placeholder="Search…" @bind="_query" @bind:event="oninput" @onkeyup="OnSearchKey" />
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="loading-spinner"></div>
+}
+else if (_videos is { Items.Count: 0 })
+{
+    <p class="empty-state">No public videos yet.</p>
+}
+else if (_videos is not null)
+{
+    <div class="video-grid">
+        @foreach (var v in _videos.Items)
+        {
+            <VideoCard Video="v" />
+        }
+    </div>
+
+    <div class="pagination">
+        <button disabled="@(_page <= 1)" @onclick="PrevPage">← Prev</button>
+        <span>Page @_page of @TotalPages</span>
+        <button disabled="@(_page >= TotalPages)" @onclick="NextPage">Next →</button>
+    </div>
+}
+
+@code {
+    private PagedResponse<VideoSummary>? _videos;
+    private string _query = string.Empty;
+    private bool _loading = true;
+    private int _page = 1;
+
+    private int TotalPages => _videos is null ? 1 : (int)Math.Ceiling(_videos.TotalCount / 20.0);
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _videos  = string.IsNullOrWhiteSpace(_query)
+            ? await Api.ListVideosAsync(page: _page, visibility: "public")
+            : await Api.SearchVideosAsync(_query, page: _page);
+        _loading = false;
+    }
+
+    private async Task OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") { _page = 1; await LoadAsync(); }
+    }
+
+    private async Task PrevPage() { _page--; await LoadAsync(); }
+    private async Task NextPage() { _page++; await LoadAsync(); }
+}
