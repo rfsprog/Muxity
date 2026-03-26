@@ -12,7 +12,6 @@
     <PackageReference Include="FastEndpoints.Security" Version="5.*" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.*" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
-    <PackageReference Include="AWSSDK.S3" Version="3.*" />
     <PackageReference Include="RabbitMQ.Client" Version="7.*" />
   </ItemGroup>
 

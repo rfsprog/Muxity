@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" Version="3.*" />
+    <PackageReference Include="AWSSDK.S3" Version="3.*" />
   </ItemGroup>
 
 </Project>

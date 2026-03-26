@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Options;
-using Muxity.Shared.Storage;
 
-namespace Muxity.Api.Services.Storage;
+namespace Muxity.Shared.Storage;
 
 /// <summary>
 /// Stores files on the local filesystem under a configurable base path.
@@ -19,7 +18,8 @@ public class LocalStorageProvider : IStorageProvider
         var fullPath = FullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
-        await using var file = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None,
+        await using var file = new FileStream(
+            fullPath, FileMode.Create, FileAccess.Write, FileShare.None,
             bufferSize: 81920, useAsync: true);
         await content.CopyToAsync(file, ct);
     }
@@ -30,7 +30,8 @@ public class LocalStorageProvider : IStorageProvider
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Storage object not found: {path}", fullPath);
 
-        Stream stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+        Stream stream = new FileStream(
+            fullPath, FileMode.Open, FileAccess.Read, FileShare.Read,
             bufferSize: 81920, useAsync: true);
         return Task.FromResult(stream);
     }
@@ -52,6 +53,9 @@ public class LocalStorageProvider : IStorageProvider
     public Task<bool> ExistsAsync(string path, CancellationToken ct = default)
         => Task.FromResult(File.Exists(FullPath(path)));
 
-    private string FullPath(string path)
-        => Path.Combine(_settings.BasePath, path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+    /// <summary>Returns the full filesystem path for a storage-relative path.</summary>
+    public string FullPath(string path)
+        => Path.Combine(
+            _settings.BasePath,
+            path.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
 }

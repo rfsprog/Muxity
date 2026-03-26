@@ -3,9 +3,8 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Options;
-using Muxity.Shared.Storage;
 
-namespace Muxity.Api.Services.Storage;
+namespace Muxity.Shared.Storage;
 
 /// <summary>
 /// Stores files in an S3-compatible bucket (AWS S3, MinIO, Cloudflare R2, etc.).
@@ -25,9 +24,9 @@ public class S3StorageProvider : IStorageProvider, IAsyncDisposable
 
         if (!string.IsNullOrWhiteSpace(_settings.ServiceUrl))
         {
-            config.ServiceURL        = _settings.ServiceUrl;
-            config.ForcePathStyle    = true;   // Required for MinIO / non-AWS endpoints
-            config.RegionEndpoint    = null;
+            config.ServiceURL     = _settings.ServiceUrl;
+            config.ForcePathStyle = true; // Required for MinIO / non-AWS endpoints
+            config.RegionEndpoint = null;
         }
 
         _client = new AmazonS3Client(credentials, config);
@@ -60,8 +59,7 @@ public class S3StorageProvider : IStorageProvider, IAsyncDisposable
             Expires    = DateTime.UtcNow.AddMinutes(_settings.PresignExpiryMinutes),
             Verb       = HttpVerb.GET,
         };
-        var url = _client.GetPreSignedURL(request);
-        return Task.FromResult(url);
+        return Task.FromResult(_client.GetPreSignedURL(request));
     }
 
     public async Task DeleteAsync(string path, CancellationToken ct = default)
@@ -70,10 +68,7 @@ public class S3StorageProvider : IStorageProvider, IAsyncDisposable
         {
             await _client.DeleteObjectAsync(_settings.BucketName, NormalizeKey(path), ct);
         }
-        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            // Already gone — treat as success
-        }
+        catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound) { }
     }
 
     public async Task<bool> ExistsAsync(string path, CancellationToken ct = default)
